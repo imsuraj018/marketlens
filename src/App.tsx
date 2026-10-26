@@ -50,6 +50,7 @@ import StorefrontPage from "./features/autocommerce/pages/StorefrontPage";
 import OwnerProductsPage from "./features/autocommerce/pages/OwnerProductsPage";
 import "./features/autocommerce/autocommerce.css";
 
+
 /* ==========================================
    AUTH CONTEXT
 ========================================== */
@@ -259,7 +260,7 @@ function App() {
     document.documentElement.dataset.theme = "light";
     document.documentElement.style.setProperty(
       "--accent",
-      "#315C48"
+      "#7c3aed"
     );
   }, []);
 
@@ -268,14 +269,14 @@ function App() {
       value={{ user, profile, refresh, loading }}
     >
       {!privatePage && (
-        <header className="header">
-          <Link className="brand" to="/">
+        <header className="header db-header">
+          <Link className="brand db-brand" to="/">
             ◈ {brand}
           </Link>
 
           <nav>
-            <NavLink to="/stores">Explore Stores</NavLink>
-            <NavLink to="/insights">Market Insights</NavLink>
+            <NavLink to="/stores">Directory</NavLink>
+            <NavLink to="/insights">Insights</NavLink>
             <NavLink to="/opportunities">Opportunities</NavLink>
 
             {user && (
@@ -283,8 +284,8 @@ function App() {
             )}
 
             {!user ? (
-              <NavLink className="pillbutton" to="/auth">
-                Sign in / Register
+              <NavLink className="pillbutton db-pillbutton" to="/auth">
+                Get Started
               </NavLink>
             ) : (
               <button
@@ -415,10 +416,34 @@ function App() {
       </main>
 
       {!privatePage && (
-        <footer>
-          MarketLens · Sant Tukaram Nagar, Pimpri ·
-          Financial estimates are models, not verified earnings ·{" "}
-          <Link to="/insights">Methodology</Link>
+        <footer className="db-footer">
+          <div className="db-footer-inner">
+            <div className="db-footer-brand">
+              <span className="db-footer-logo">◈ {brand || 'MarketLens'}</span>
+              <p>The intelligence platform for local commerce in Sant Tukaram Nagar, Pimpri.</p>
+            </div>
+            <div className="db-footer-links">
+              <div>
+                <strong>Platform</strong>
+                <Link to="/stores">Directory</Link>
+                <Link to="/insights">Market Insights</Link>
+                <Link to="/opportunities">Opportunities</Link>
+              </div>
+              <div>
+                <strong>Business</strong>
+                <Link to="/auth">Get Started</Link>
+                <Link to="/dashboard">Owner Studio</Link>
+                <Link to="/insights">Methodology</Link>
+              </div>
+              <div>
+                <strong>Legal</strong>
+                <span>Financial estimates are models, not verified earnings.</span>
+              </div>
+            </div>
+          </div>
+          <div className="db-footer-bottom">
+            <span>© 2024 MarketLens · Sant Tukaram Nagar, Pimpri</span>
+          </div>
         </footer>
       )}
     </AuthContext.Provider>
@@ -471,71 +496,159 @@ function Require({
 function Home({ brand }: { brand: string }) {
   return (
     <>
+      {/* ── HERO ── */}
       <section className="hero">
-        <div>
+        <div className="hero-content">
           <span className="eyebrow">
             SANT TUKARAM NAGAR · PIMPRI
           </span>
 
           <h1>
-            Discover your neighbourhood.
-            <br />
-            Understand its businesses.
+            The Intelligence Platform for{" "}
+            <span className="hero-gradient-text">
+              Local Commerce
+            </span>
           </h1>
 
-          <p>
-            Find verified local stores, contact business owners,
-            and explore transparent market insights.
+          <p className="hero-sub">
+            Discover verified local businesses, connect with owners,
+            and unlock transparent market intelligence for your neighbourhood.
           </p>
 
           <div className="actions">
-            <Link className="button primary" to="/stores">
-              Explore businesses →
+            <Link className="button primary db-btn-primary" to="/stores">
+              Explore Businesses
             </Link>
-
-            <Link className="button" to="/dashboard">
-              List your business
+            <Link className="button db-btn-ghost" to="/auth">
+              Get Started Free →
             </Link>
           </div>
 
-          <small>
-            Only administrator-approved shops appear in the
-            public directory.
-          </small>
+          <p className="hero-trust">
+            ✓ Admin-verified listings &nbsp;·&nbsp; ✓ Real market data &nbsp;·&nbsp; ✓ Free to browse
+          </p>
         </div>
 
-        <div className="heroart">
-          <span>🛒 Daily essentials</span>
-          <span>✚ Health & wellness</span>
-          <span>☕ Food & cafés</span>
-          <span>▤ Student services</span>
+        <div className="heroart db-heroart">
+          <div className="db-stat-card">
+            <span className="db-stat-num">500+</span>
+            <span className="db-stat-label">Listed Businesses</span>
+          </div>
+          <div className="db-stat-card">
+            <span className="db-stat-num">10K+</span>
+            <span className="db-stat-label">Monthly Visitors</span>
+          </div>
+          <div className="db-stat-card">
+            <span className="db-stat-num">98%</span>
+            <span className="db-stat-label">Verified Listings</span>
+          </div>
+          <div className="db-stat-card">
+            <span className="db-stat-num">4</span>
+            <span className="db-stat-label">Business Categories</span>
+          </div>
         </div>
       </section>
 
-      <section className="grid three">
-        <Panel title="Find trusted listings">
-          <p>
-            Search categories, locations and businesses.
-            Contact approved shops directly.
-          </p>
-          <Link to="/stores">Browse directory →</Link>
-        </Panel>
+      {/* ── TRUST STRIP ── */}
+      <section className="db-trust-strip">
+        <p className="db-trust-label">TRUSTED BY BUSINESSES IN</p>
+        <div className="db-trust-logos">
+          <span>🛒 Daily Essentials</span>
+          <span>✚ Health &amp; Wellness</span>
+          <span>☕ Food &amp; Cafés</span>
+          <span>▤ Student Services</span>
+          <span>🏠 Home Services</span>
+        </div>
+      </section>
 
-        <Panel title="Business owner studio">
-          <p>
-            Apply for owner access, submit a shop and
-            receive admin verification.
-          </p>
-          <Link to="/dashboard">Get started →</Link>
-        </Panel>
+      {/* ── FEATURES ── */}
+      <section className="db-features-section">
+        <div className="db-section-head">
+          <span className="eyebrow">PLATFORM CAPABILITIES</span>
+          <h2>Everything you need to understand local commerce</h2>
+          <p>From business discovery to market intelligence — all in one place.</p>
+        </div>
 
-        <Panel title="Market research">
-          <p>
-            Estimate potential turnover using explicit,
-            adjustable assumptions.
-          </p>
-          <Link to="/insights">Open insights →</Link>
-        </Panel>
+        <div className="db-features-grid">
+          <div className="db-feature-card db-feature-card--large">
+            <div className="db-feature-icon">🔍</div>
+            <h3>Verified Business Directory</h3>
+            <p>Browse admin-approved local businesses with verified contact details, categories, and locations. No spam, no unverified listings.</p>
+            <Link to="/stores" className="db-link-arrow">Browse directory →</Link>
+          </div>
+
+          <div className="db-feature-card">
+            <div className="db-feature-icon">📊</div>
+            <h3>Market Intelligence</h3>
+            <p>Estimate potential revenue and market opportunity with transparent, adjustable financial models.</p>
+            <Link to="/insights" className="db-link-arrow">Open insights →</Link>
+          </div>
+
+          <div className="db-feature-card">
+            <div className="db-feature-icon">🏪</div>
+            <h3>Owner Studio</h3>
+            <p>Apply for business owner access, create listings, manage enquiries, and track your shop's performance.</p>
+            <Link to="/dashboard" className="db-link-arrow">Get started →</Link>
+          </div>
+
+          <div className="db-feature-card">
+            <div className="db-feature-icon">✉️</div>
+            <h3>Direct Enquiries</h3>
+            <p>Contact businesses directly through the platform. Business owners can manage and respond to all customer messages.</p>
+            <Link to="/stores" className="db-link-arrow">Find businesses →</Link>
+          </div>
+
+          <div className="db-feature-card db-feature-card--accent">
+            <div className="db-feature-icon">🚀</div>
+            <h3>Opportunity Finder</h3>
+            <p>Identify market gaps and business opportunities in your neighbourhood with data-driven insights.</p>
+            <Link to="/opportunities" className="db-link-arrow">View opportunities →</Link>
+          </div>
+        </div>
+      </section>
+
+      {/* ── HOW IT WORKS ── */}
+      <section className="db-how-section">
+        <div className="db-section-head">
+          <span className="eyebrow">HOW IT WORKS</span>
+          <h2>Three steps to neighbourhood intelligence</h2>
+        </div>
+
+        <div className="db-steps">
+          <div className="db-step">
+            <div className="db-step-num">01</div>
+            <h3>Discover</h3>
+            <p>Search and filter verified local businesses by category, location, and service type.</p>
+          </div>
+          <div className="db-step-divider" />
+          <div className="db-step">
+            <div className="db-step-num">02</div>
+            <h3>Connect</h3>
+            <p>Send direct enquiries to business owners. Get responses and build relationships.</p>
+          </div>
+          <div className="db-step-divider" />
+          <div className="db-step">
+            <div className="db-step-num">03</div>
+            <h3>Analyse</h3>
+            <p>Use market data and revenue models to make informed business decisions.</p>
+          </div>
+        </div>
+      </section>
+
+      {/* ── CTA BANNER ── */}
+      <section className="db-cta-banner">
+        <div className="db-cta-content">
+          <h2>Ready to explore your neighbourhood?</h2>
+          <p>Join hundreds of businesses and thousands of customers already using MarketLens.</p>
+          <div className="actions">
+            <Link className="button db-cta-btn" to="/stores">
+              Explore Businesses
+            </Link>
+            <Link className="button db-btn-ghost-dark" to="/auth">
+              Create Free Account
+            </Link>
+          </div>
+        </div>
       </section>
     </>
   );

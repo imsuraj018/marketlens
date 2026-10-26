@@ -1,275 +1,205 @@
 
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { supabase } from "../../../lib/supabase";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import ProductForm from "../components/ProductForm";
+import ProductTable from "../components/ProductTable";
+import InventoryEditor from "../components/InventoryEditor";
+
 import {
-  BUSINESS_ID,
-  addProduct,
+  createProduct,
+  deactivateProduct,
   getOwnerProducts,
   setProductPublished,
-  type Product,
-} from "../services/api";
+  updateProduct,
+} from "../services/products";
 
-type Enquiry = {
-  id: string;
-  message: string;
-  status: string;
-  created_at: string;
-};
+import type { AutoProduct, ProductInput } from "../types";
+import { STORE_NAME } from "../config";
 
 export default function OwnerProductsPage() {
-  const [allowed, setAllowed] = useState(false);
-  const [checking, setChecking] = useState(true);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [enquiries, setEnquiries] = useState<Enquiry[]>([]);
-  const [feedback, setFeedback] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [products, setProducts] = useState<AutoProduct[]>([]);
+  const [selected, setSelected] = useState<AutoProduct | null>(null);
+  const [inventoryProduct, setInventoryProduct] =
+    useState<AutoProduct | null>(null);
 
-  const [form, setForm] = useState({
-    sku: "",
-    name: "",
-    category: "",
-    description: "",
-    brand: "",
-    image_url: "",
-    retail_price: "",
-  });
+  const [showForm, setShowForm] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
 
-  async function loadProducts() {
-    setProducts(await getOwnerProducts());
-  }
-
-  async function loadEnquiries() {
-    const { data, error } = await supabase
-      .from("ac_product_enquiries")
-      .select("id,message,status,created_at")
-      .eq("business_id", BUSINESS_ID)
-      .order("created_at", { ascending: false });
-
-    if (error) throw error;
-    setEnquiries(data ?? []);
-  }
-
-  useEffect(() => {
-    async function initialize() {
-      try {
-        const { data: auth, error: authError } =
-          await supabase.auth.getUser();
-
-        if (authError) throw authError;
-        if (!auth.user) {
-          setFeedback("Please sign in with the owner account.");
-          return;
-        }
-
-        const { data: membership, error } = await supabase
-          .from("business_memberships")
-          .select("role")
-          .eq("business_id", BUSINESS_ID)
-          .eq("user_id", auth.user.id)
-          .eq("is_active", true)
-          .in("role", ["owner", "manager"])
-          .maybeSingle();
-
-        if (error) throw error;
-
-        if (!membership) {
-          setFeedback("You do not have owner or manager access.");
-          return;
-        }
-
-        setAllowed(true);
-        await Promise.all([loadProducts(), loadEnquiries()]);
-      } catch (error) {
-        setFeedback(
-          error instanceof Error ? error.message : "Loading failed"
-        );
-      } finally {
-        setChecking(false);
-      }
+  const refresh = useCallback(async () => {
+    try {
+      setError("");
+      const rows = await getOwnerProducts();
+      setProducts(rows);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to load products");
+    } finally {
+      setLoading(false);
     }
-
-    void initialize();
   }, []);
 
-  async function createProduct(e: React.FormEvent) {
-    e.preventDefault();
-    if (saving) return;
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
-    setSaving(true);
-    setFeedback("");
+  const filtered = useMemo(() => {
+    const query = search.trim().toLowerCase();
 
+    return products.filter((product) =>
+      [product.name, product.sku, product.category, product.brand ?? ""]
+        .join(" ")
+        .toLowerCase()
+        .includes(query)
+    );
+  }, [products, search]);
+
+  async function saveProduct(input: ProductInput) {
+    setBusy(true);
     try {
-      await addProduct({
-        business_id: BUSINESS_ID,
-        sku: form.sku.trim(),
-        name: form.name.trim(),
-        category: form.category.trim(),
-        description: form.description.trim(),
-        brand: form.brand.trim(),
-        image_url: form.image_url.trim() || null,
-        retail_price: Number(form.retail_price),
-        is_published: false,
-      });
+      if (selected) {
+        await updateProduct(selected.id, input);
+      } else {
+        await createProduct(input);
+      }
 
-      setForm({
-        sku: "",
-        name: "",
-        category: "",
-        description: "",
-        brand: "",
-        image_url: "",
-        retail_price: "",
-      });
-
-      await loadProducts();
-      setFeedback("Product saved as a draft.");
-    } catch (error) {
-      setFeedback(
-        error instanceof Error ? error.message : "Could not save product"
-      );
+      setShowForm(false);
+      setSelected(null);
+      await refresh();
     } finally {
-      setSaving(false);
+      setBusy(false);
     }
   }
 
-  async function togglePublished(product: Product) {
+  async function publish(product: AutoProduct) {
+    setBusy(true);
+    setError("");
+
     try {
       await setProductPublished(product.id, !product.is_published);
-      await loadProducts();
-    } catch (error) {
-      setFeedback(
-        error instanceof Error ? error.message : "Update failed"
-      );
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Publishing failed");
+    } finally {
+      setBusy(false);
     }
   }
 
-  if (checking) return <main className="ac-container">Checking access...</main>;
+  async function deactivate(product: AutoProduct) {
+    if (!window.confirm(`Deactivate "${product.name}"?`)) return;
 
-  if (!allowed) {
-    return (
-      <main className="ac-container">
-        <h1>Dealer access</h1>
-        <p>{feedback}</p>
-        <Link to="/auth">Sign in</Link>
-      </main>
-    );
+    setBusy(true);
+    setError("");
+
+    try {
+      await deactivateProduct(product.id);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Deactivation failed");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
-    <main className="ac-container">
-      <header className="ac-header">
-        <h2>Anshul Car Decor · Workspace</h2>
-        <Link to="/store">View public store</Link>
+    <div className="ac-page">
+      <header className="ac-heading">
+        <div>
+          <p className="ac-eyebrow">MARKETLENS / AUTOCOMMERCE</p>
+          <h1>{STORE_NAME}</h1>
+          <p className="ac-muted">Product catalogue and inventory management</p>
+        </div>
+
+        <button
+          className="ac-primary"
+          onClick={() => {
+            setSelected(null);
+            setInventoryProduct(null);
+            setShowForm(true);
+          }}
+        >
+          + Add product
+        </button>
       </header>
 
-      <section className="ac-hero">
-        <span>OWNER WORKSPACE</span>
-        <h1>Product management</h1>
-        <p>Manage the products shown to MarketLens customers.</p>
-      </section>
+      <div className="ac-stats">
+        <div className="ac-panel">
+          <span>Total products</span>
+          <strong>{products.length}</strong>
+        </div>
 
-      <div className="ac-dashboard">
-        <section className="ac-panel">
-          <h2>Add product</h2>
+        <div className="ac-panel">
+          <span>Published</span>
+          <strong>
+            {products.filter((p) => p.is_published && p.is_active).length}
+          </strong>
+        </div>
 
-          <form onSubmit={createProduct} className="ac-form">
-            {(
-              [
-                ["sku", "SKU"],
-                ["name", "Product name"],
-                ["category", "Category"],
-                ["brand", "Brand"],
-                ["image_url", "Image URL"],
-                ["retail_price", "Retail price (₹)"],
-              ] as const
-            ).map(([key, label]) => (
-              <label key={key}>
-                {label}
-                <input
-                  required={["sku", "name", "category", "retail_price"].includes(key)}
-                  type={key === "retail_price" ? "number" : "text"}
-                  min={key === "retail_price" ? "0" : undefined}
-                  step={key === "retail_price" ? "0.01" : undefined}
-                  value={form[key]}
-                  onChange={(e) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      [key]: e.target.value,
-                    }))
-                  }
-                />
-              </label>
-            ))}
+        <div className="ac-panel">
+          <span>Draft products</span>
+          <strong>
+            {products.filter((p) => !p.is_published && p.is_active).length}
+          </strong>
+        </div>
 
-            <label>
-              Description
-              <textarea
-                rows={4}
-                value={form.description}
-                onChange={(e) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    description: e.target.value,
-                  }))
-                }
-              />
-            </label>
-
-            <button disabled={saving} type="submit">
-              {saving ? "Saving..." : "Save product draft"}
-            </button>
-          </form>
-        </section>
-
-        <section className="ac-panel">
-          <h2>Products ({products.length})</h2>
-
-          {products.length === 0 && <p>No products added yet.</p>}
-
-          {products.map((product) => (
-            <div className="ac-list-item" key={product.id}>
-              <div>
-                <strong>{product.name}</strong>
-                <p>
-                  {product.sku} · ₹{product.retail_price}
-                </p>
-                <small>
-                  {product.is_published ? "Published" : "Draft"}
-                </small>
-              </div>
-
-              <button
-                className="ac-secondary"
-                onClick={() => togglePublished(product)}
-              >
-                {product.is_published ? "Unpublish" : "Publish"}
-              </button>
-            </div>
-          ))}
-        </section>
+        <div className="ac-panel">
+          <span>Inactive products</span>
+          <strong>{products.filter((p) => !p.is_active).length}</strong>
+        </div>
       </div>
 
-      <section className="ac-panel ac-section">
-        <h2>Customer enquiries ({enquiries.length})</h2>
+      {error && <p className="ac-error" role="alert">{error}</p>}
 
-        {enquiries.length === 0 && <p>No enquiries yet.</p>}
+      {showForm && (
+        <ProductForm
+          product={selected}
+          saving={busy}
+          onSave={saveProduct}
+          onCancel={() => {
+            setShowForm(false);
+            setSelected(null);
+          }}
+        />
+      )}
 
-        {enquiries.map((enquiry) => (
-          <div className="ac-list-item" key={enquiry.id}>
-            <div>
-              <strong>{enquiry.status}</strong>
-              <p>{enquiry.message}</p>
-              <small>
-                {new Date(enquiry.created_at).toLocaleString("en-IN")}
-              </small>
-            </div>
-          </div>
-        ))}
+      {inventoryProduct && (
+        <InventoryEditor
+          product={inventoryProduct}
+          onClose={() => setInventoryProduct(null)}
+        />
+      )}
+
+      <section>
+        <div className="ac-heading">
+          <h2>Products</h2>
+          <input
+            aria-label="Search products"
+            placeholder="Search name, SKU or category..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+
+        {loading ? (
+          <p>Loading products...</p>
+        ) : (
+          <ProductTable
+            products={filtered}
+            busy={busy}
+            onEdit={(product) => {
+              setSelected(product);
+              setInventoryProduct(null);
+              setShowForm(true);
+            }}
+            onInventory={(product) => {
+              setShowForm(false);
+              setInventoryProduct(product);
+            }}
+            onPublish={publish}
+            onDeactivate={deactivate}
+          />
+        )}
       </section>
-
-      {feedback && <p role="status" className="ac-feedback">{feedback}</p>}
-    </main>
+    </div>
   );
 }
-
