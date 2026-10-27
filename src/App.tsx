@@ -43,12 +43,10 @@ import {
 import WorkspaceLayout from "./components/WorkspaceLayout";
 import type { NavigationItem } from "./components/Sidebar";
 
-import "./marketlens-theme.css";
 
 
 import StorefrontPage from "./features/autocommerce/pages/StorefrontPage";
 import OwnerProductsPage from "./features/autocommerce/pages/OwnerProductsPage";
-import "./features/autocommerce/autocommerce.css";
 
 
 /* ==========================================
@@ -243,6 +241,7 @@ function App() {
       setTimeout(() => refresh(), 0);
     });
 
+    
     db.from("app_settings")
       .select("value")
       .eq("key", "site_name")
@@ -257,12 +256,9 @@ function App() {
   }, []);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = "light";
-    document.documentElement.style.setProperty(
-      "--accent",
-      "#7c3aed"
-    );
-  }, []);
+  document.documentElement.dataset.theme = "light";
+  document.documentElement.style.removeProperty("--accent");
+}, []);
 
   return (
     <AuthContext.Provider
