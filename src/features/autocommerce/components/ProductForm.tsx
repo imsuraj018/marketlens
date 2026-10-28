@@ -1,6 +1,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import type { AutoProduct, ProductInput } from "../types";
+import { getProductTemplates, type ProductTemplate } from "../services/products";
 
 type Props = {
   product?: AutoProduct | null;
@@ -30,6 +31,8 @@ export default function ProductForm({
 }: Props) {
   const [form, setForm] = useState<ProductInput>(emptyForm);
   const [error, setError] = useState("");
+  const [templates, setTemplates] = useState<ProductTemplate[]>([]);
+  useEffect(() => { getProductTemplates().then(setTemplates).catch(e => setError(e instanceof Error ? e.message : "Catalogue unavailable")); }, []);
 
   useEffect(() => {
     if (product) {
@@ -63,6 +66,7 @@ export default function ProductForm({
     event.preventDefault();
     setError("");
 
+    if (!product && !templates.some(t => t.sku === form.sku)) { setError("Select an approved product"); return; }
     if (!form.sku.trim() || !form.name.trim() || !form.category.trim()) {
       setError("SKU, product name and category are required");
       return;
@@ -102,34 +106,20 @@ export default function ProductForm({
       {error && <p role="alert" className="ac-error">{error}</p>}
 
       <div className="ac-form-grid">
-        <label>
-          SKU *
-          <input
-            required
-            value={form.sku}
-            onChange={(e) => change("sku", e.target.value)}
-            placeholder="ACD-001"
-          />
+        <label className="ac-wide">
+          Predefined product *
+          <select required disabled={Boolean(product)} value={form.sku} onChange={e => {
+            const t = templates.find(t => t.sku === e.target.value);
+            if (t) setForm(previous => ({ ...previous, sku: t.sku, name: t.name, category: t.category, description: t.description, brand: t.brand }));
+          }}>
+            <option value="">Select a catalogue product</option>
+            {templates.map(t => <option key={t.sku} value={t.sku}>{t.category} — {t.name} ({t.sku})</option>)}
+            {product && !templates.some(t => t.sku === product.sku) && <option value={product.sku}>{product.name} ({product.sku})</option>}
+          </select>
         </label>
-
-        <label>
-          Product name *
-          <input
-            required
-            value={form.name}
-            onChange={(e) => change("name", e.target.value)}
-          />
-        </label>
-
-        <label>
-          Category *
-          <input
-            required
-            value={form.category}
-            onChange={(e) => change("category", e.target.value)}
-            placeholder="Interior Accessories"
-          />
-        </label>
+        <label>SKU<input readOnly value={form.sku} /></label>
+        <label>Product name<input readOnly value={form.name} /></label>
+        <label>Category<input readOnly value={form.category} /></label>
 
         <label>
           Brand
