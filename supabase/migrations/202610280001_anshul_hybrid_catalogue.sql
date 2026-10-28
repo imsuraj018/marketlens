@@ -51,7 +51,7 @@ create table if not exists public.ac_products (
 );
 -- Existing installations may already have this table; guarantee SKU uniqueness.
 create unique index if not exists ac_products_business_sku_unique on public.ac_products(business_id,sku);
--- Existing products with custom SKUs must be reconciled before enforcing the FK.
+-- Legacy custom SKUs remain editable; newly inserted listings must use approved templates.
 -- The trigger enforces that every newly created listing uses an approved template.
 create or replace function public.ac_validate_template() returns trigger
 language plpgsql security invoker set search_path='' as $$
@@ -66,7 +66,7 @@ begin
  return new;
 end $$;
 drop trigger if exists ac_product_template_guard on public.ac_products;
-create trigger ac_product_template_guard before insert or update on public.ac_products
+create trigger ac_product_template_guard before insert or update of sku,business_id on public.ac_products
 for each row execute function public.ac_validate_template();
 
 -- Seed drafts, not fabricated prices or stock. Owners publish only after filling details.
@@ -81,6 +81,12 @@ alter table public.ac_product_templates enable row level security;
 alter table public.ac_products enable row level security;
 drop policy if exists ac_templates_read on public.ac_product_templates;
 create policy ac_templates_read on public.ac_product_templates for select to authenticated using (is_active or (select public.is_admin()));
+-- Remove older permissive product policies; permissive policies otherwise combine with OR.
+do $ declare p record; begin
+ for p in select policyname from pg_policies where schemaname='public' and tablename='ac_products' loop
+   execute format('drop policy %I on public.ac_products',p.policyname);
+ end loop;
+end $;
 drop policy if exists ac_products_public_read on public.ac_products;
 create policy ac_products_public_read on public.ac_products for select to anon,authenticated
 using (is_active and is_published and exists(select 1 from public.businesses b where b.id=business_id and b.status='approved'));
@@ -99,3 +105,22 @@ grant select on public.ac_products to anon;
 grant select on public.ac_products,public.ac_product_templates to authenticated;
 grant insert,update on public.ac_products to authenticated;
 -- Product templates are maintained only by trusted SQL migrations/admin backend.
+
+-- Inventory authorization: protect existing inventory table if installed.
+do $$ declare p record; begin
+ if to_regclass('public.ac_inventory') is not null then
+   execute 'alter table public.ac_inventory enable row level security';
+   for p in select policyname from pg_policies where schemaname='public' and tablename='ac_inventory' loop
+     execute format('drop policy %I on public.ac_inventory',p.policyname);
+   end loop;
+   execute $policy$create policy ac_inventory_manager_read on public.ac_inventory for select to authenticated
+     using (public.is_admin() or exists(select 1 from public.businesses b where b.id=business_id and b.owner_id=auth.uid() and public.is_owner()))$policy$;
+   execute $policy$create policy ac_inventory_manager_insert on public.ac_inventory for insert to authenticated
+     with check (public.is_admin() or exists(select 1 from public.businesses b where b.id=business_id and b.owner_id=auth.uid() and public.is_owner()))$policy$;
+   execute $policy$create policy ac_inventory_manager_update on public.ac_inventory for update to authenticated
+     using (public.is_admin() or exists(select 1 from public.businesses b where b.id=business_id and b.owner_id=auth.uid() and public.is_owner()))
+     with check (public.is_admin() or exists(select 1 from public.businesses b where b.id=business_id and b.owner_id=auth.uid() and public.is_owner()))$policy$;
+   execute 'revoke all on public.ac_inventory from anon,authenticated';
+   execute 'grant select,insert,update on public.ac_inventory to authenticated';
+ end if;
+end $$;
