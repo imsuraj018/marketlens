@@ -658,144 +658,88 @@ function AuthPage() {
   const auth = useAuth();
   const navigate = useNavigate();
   const { message, setMessage } = useNotice();
-
-  const [mode, setMode] = useState<
-    "login" | "register"
-  >("login");
-
+  const [mode, setMode] = useState<"login" | "register">("login");
+  const [accountType, setAccountType] = useState<"customer" | "business_owner" | "admin">("customer");
   const [busy, setBusy] = useState(false);
 
-  if (auth.user) {
-    return <Navigate to="/dashboard" />;
-  }
+  if (auth.user) return <Navigate to="/dashboard" />;
 
-  async function submit(
-    e: FormEvent<HTMLFormElement>
-  ) {
+  async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-
     const form = new FormData(e.currentTarget);
-
-    const email = String(form.get("email"));
+    const email = String(form.get("email")).trim();
     const password = String(form.get("password"));
-
+    setMessage("");
     setBusy(true);
-
-    const result =
-      mode === "login"
-        ? await db.auth.signInWithPassword({
-            email,
-            password,
-          })
-        : await db.auth.signUp({
-            email,
-            password,
-            options: {
-              data: {
-                full_name: String(
-                  form.get("name") || ""
-                ),
-              },
-            },
-          });
-
-    setBusy(false);
-
-    if (result.error) {
-      setMessage(result.error.message);
-    } else if (mode === "register") {
-      setMessage(
-        "Account created. Check your email for verification if enabled."
-      );
-    } else {
-      navigate("/dashboard");
+    try {
+      if (mode === "login") {
+        const { data, error } = await db.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        const { data: profile, error: profileError } = await db.from("profiles")
+          .select("role,is_active").eq("id", data.user.id).single();
+        if (profileError || !profile) {
+          await db.auth.signOut();
+          throw new Error("Account profile is unavailable. Contact the administrator.");
+        }
+        if (!profile.is_active) {
+          await db.auth.signOut();
+          throw new Error("This account is inactive. Contact the administrator.");
+        }
+        if (profile.role !== accountType) {
+          await db.auth.signOut();
+          throw new Error("This account is not registered as " + (accountType === "business_owner" ? "a shop owner" : accountType === "customer" ? "a user" : "an admin") + ". Select the correct account type.");
+        }
+        await auth.refresh();
+        navigate(accountType === "admin" ? "/admin" : accountType === "business_owner" ? "/owner" : "/dashboard");
+      } else {
+        const { data, error } = await db.auth.signUp({
+          email, password,
+          options: { data: { full_name: String(form.get("name") || "").trim() } },
+        });
+        if (error) throw error;
+        if (accountType === "business_owner") {
+          if (data.session && data.user) {
+            const { error: requestError } = await db.from("owner_requests").insert({
+              user_id: data.user.id,
+              reason: String(form.get("reason") || "").trim(),
+            });
+            if (requestError) throw new Error("Account created, but owner request failed: " + requestError.message + ". Submit your request from the customer dashboard.");
+            setMessage("Account created. Your shop-owner request is pending admin approval.");
+          } else {
+            setMessage("Account created. Verify your email, sign in as User, and submit your shop-owner request from the dashboard.");
+          }
+        } else {
+          setMessage("User account created. Verify your email if confirmation is enabled.");
+        }
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Authentication failed.");
+    } finally {
+      setBusy(false);
     }
   }
 
   return (
     <div className="authbox">
-      <Panel
-        title={
-          mode === "login"
-            ? "Welcome back"
-            : "Create an account"
-        }
-      >
+      <Panel title={mode === "login" ? "Sign in to MarketLens" : "Create an account"}>
         <div className="tabs">
-          <button
-            className={
-              mode === "login" ? "active" : ""
-            }
-            onClick={() => setMode("login")}
-          >
-            Sign in
-          </button>
-
-          <button
-            className={
-              mode === "register" ? "active" : ""
-            }
-            onClick={() => setMode("register")}
-          >
-            Register
-          </button>
+          <button type="button" className={mode === "login" ? "active" : ""} onClick={() => { setMode("login"); setMessage(""); }}>Sign in</button>
+          <button type="button" className={mode === "register" ? "active" : ""} onClick={() => { setMode("register"); setMessage(""); if (accountType === "admin") setAccountType("customer"); }}>Register</button>
         </div>
-
+        <div className="tabs" role="group" aria-label="Account type">
+          <button type="button" className={accountType === "customer" ? "active" : ""} onClick={() => setAccountType("customer")}>User</button>
+          <button type="button" className={accountType === "business_owner" ? "active" : ""} onClick={() => setAccountType("business_owner")}>Shop owner</button>
+          {mode === "login" && <button type="button" className={accountType === "admin" ? "active" : ""} onClick={() => setAccountType("admin")}>Admin</button>}
+        </div>
         <form className="form" onSubmit={submit}>
-          {mode === "register" && (
-            <label>
-              Full name
-              <input
-                name="name"
-                required
-                minLength={2}
-              />
-            </label>
-          )}
-
-          <label>
-            Email
-            <input
-              name="email"
-              type="email"
-              required
-              autoComplete="email"
-            />
-          </label>
-
-          <label>
-            Password
-            <input
-              name="password"
-              type="password"
-              required
-              minLength={6}
-              autoComplete={
-                mode === "login"
-                  ? "current-password"
-                  : "new-password"
-              }
-            />
-          </label>
-
-          <button
-            disabled={busy}
-            className="button primary"
-          >
-            {busy
-              ? "Please wait…"
-              : mode === "login"
-              ? "Sign in"
-              : "Create customer account"}
-          </button>
+          {mode === "register" && <label>Full name<input name="name" required minLength={2} maxLength={100} /></label>}
+          <label>Email<input name="email" type="email" required autoComplete="email" /></label>
+          <label>Password<input name="password" type="password" required minLength={6} autoComplete={mode === "login" ? "current-password" : "new-password"} /></label>
+          {mode === "register" && accountType === "business_owner" && <label>Tell us about your shop<textarea name="reason" required minLength={10} maxLength={1000} placeholder="Shop name, business type and why you need owner access" /></label>}
+          <button disabled={busy} className="button primary">{busy ? "Please wait…" : mode === "login" ? "Sign in" : accountType === "business_owner" ? "Create account & request owner access" : "Create user account"}</button>
         </form>
-
         <Notice message={message} />
-
-        <p className="hint">
-          New accounts start as customers.
-          Business-owner privileges require admin approval.
-        </p>
+        <p className="hint">{mode === "login" ? "Choose the role assigned to your account. Selecting a role does not grant privileges." : accountType === "business_owner" ? "New accounts begin as users. An admin must approve shop-owner access before you can manage a shop." : "Admin accounts are provisioned by an administrator, not through public registration."}</p>
       </Panel>
     </div>
   );
